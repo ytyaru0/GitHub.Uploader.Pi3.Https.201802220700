@@ -9,6 +9,7 @@ from web.service.github.api.v3.authentication.BasicAuthentication import BasicAu
 from web.service.github.api.v3.authentication.TwoFactorAuthentication import TwoFactorAuthentication
 from web.service.github.api.v3.authentication.OAuthAuthentication import OAuthAuthentication
 import web.service.github.api.v3.Client
+"""
 import database.language.Main
 import database.api.Main
 import database.gnu_license.create.Main
@@ -19,8 +20,14 @@ import database.repo.insert.command.repositories.Inserter
 import web.log.Log
 import setting.Setting
 import glob
+"""
+import database.DatabaseMeta import DatabaseMeta
+import database.init.DbInitializer import DbInitializer
+import database.init.ApisDbInitializer import ApisDbInitializer
+import database.init.GnuLicensesDbInitializer import GnuLicensesDbInitializer
 
-class Database:
+class Database(metaclass=DatabaseMeta):
+#class Database:
     def __init__(self):
 #    def __init__(self, path_dir_root):
         self.__path_dir_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -29,6 +36,7 @@ class Database:
         self.__setting = setting.Setting.Setting()
         self.__path_dir_this = os.path.abspath(os.path.dirname(__file__))
         self.__path_dir_db = self.__setting.DbPath
+        """
         self.__files = {
             'lang': 'GitHub.Languages.sqlite3',
             'api': 'GitHub.Apis.sqlite3',
@@ -49,6 +57,7 @@ class Database:
             'repos': None,
         }
         """
+        """
         self.__lang = None
         self.__api = None
         self.__gnu_license = None
@@ -58,7 +67,7 @@ class Database:
         self.__repo = None
         self.__repos = {}
         """
-
+    """
     @property
     def Paths(self): return self.__files
     @property
@@ -75,6 +84,7 @@ class Database:
     def OtherRepositories(self):  return self.__dbs['other_repo']
     @property
     def Repositories(self): return self.__dbs['repos']
+    """
     """
     @property
     def Paths(self):
@@ -101,7 +111,23 @@ class Database:
     def Repositories(self):
         return self.__repos
     """
+    
+    def Initialize(self):
+        pass
+        """
+        for initer in [ApisDbInitializer(), GnuLicensesDbInitializer()]
+            initer.CreateDb()
+            initer.ConnectDb()
+            initer.CreateTable()
+            initer.InsertInitData()
+            self[initer.DbId] = initer # プロパティにしたいが方法不明。これは属性値になってしまう
+            #self.__dbs[initer.DbId] = initer # Db, DbFilePathなどが得られる
+            # https://www.python-izm.com/advanced/property/
+            #property(get_url, set_url, del_url, 'url Property')
+            #property(lambda self x: x+1)
+        """
 
+    """
     # 1. 全DBのファイルパス作成
     # 2. マスターDBファイルがないなら
     # 2-1. マスターDBファイル作成
@@ -210,6 +236,12 @@ class Database:
         with open(sql_path, 'r') as f:
             sql = f.read()
             self.__dbs[dbname].query(sql)
+    """
+
+
+
+
+
 
     """
     def __OpenDb(self):
