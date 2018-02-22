@@ -25,7 +25,7 @@ class Main:
         self.__Insert()
 #        self.__Check() # Check.shで正常に文字列結合できずパスを作成できない。
  
-    # 2018-02-20 dataset.database.query(SQL)で実行するよう改修（sqlite3コマンド不要化）
+    # 2018-02-22 dataset.database.query(SQL)で実行するよう改修（sqlite3コマンド不要化）
     def __Create(self):
         self.__CreateBlankFile()
         for filename in ['Accounts','TwoFactors','AccessTokens','SshKeys']:

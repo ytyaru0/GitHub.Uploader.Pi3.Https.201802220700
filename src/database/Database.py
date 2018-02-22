@@ -18,6 +18,7 @@ import database.account.Main
 import database.repo.insert.command.repositories.Inserter
 import web.log.Log
 import setting.Setting
+import glob
 
 class Database:
     def __init__(self):
@@ -36,7 +37,18 @@ class Database:
             'license': 'GitHub.Licenses.sqlite3',
             'other_repo': 'GitHub.Repositories.__other__.sqlite3',
             'repo': 'GitHub.Repositories.{user}.sqlite3',
-        }        
+        }
+        self.__dbs = {
+            'language': None,
+            'api': None,
+            'gnu_license': None,
+            'account': None,
+            'license': None,
+            'other_repo': None,
+            'repo': None,
+            'repos': None,
+        }
+        """
         self.__lang = None
         self.__api = None
         self.__gnu_license = None
@@ -45,7 +57,25 @@ class Database:
         self.__other_repo = None
         self.__repo = None
         self.__repos = {}
+        """
 
+    @property
+    def Paths(self): return self.__files
+    @property
+    def Languages(self): return self.__dbs['language']
+    @property
+    def Apis(self): return self.__dbs['api']
+    @property
+    def GnuLicenses(self): return self.__dbs['gnu_license']
+    @property
+    def Accounts(self): return self.__dbs['account']
+    @property
+    def Licenses(self): return self.__dbs['license']
+    @property
+    def OtherRepositories(self):  return self.__dbs['other_repo']
+    @property
+    def Repositories(self): return self.__dbs['repos']
+    """
     @property
     def Paths(self):
         return self.__files
@@ -70,6 +100,7 @@ class Database:
     @property
     def Repositories(self):
         return self.__repos
+    """
 
     # 1. 全DBのファイルパス作成
     # 2. マスターDBファイルがないなら
@@ -82,6 +113,128 @@ class Database:
             self.__files[key] = os.path.join(self.__path_dir_db, self.__files[key])
         self.__OpenDb()
 
+    def __OpenDb(self):
+        # 基本DB作成（順序あり）
+        for name in ['language','api','gnu_license','account']:
+            if None is self.__dbs[name]:
+                self.__CreateDb(name)
+
+        # DB作成にTokenが必要なもの（他DB依存）
+        if 0 < self.__dbs['account']['Accounts'].count():
+            self.__CreateLicenseDb()
+            """
+            # ライセンスDB生成（ファイル、テーブル作成。データ挿入）
+            if not(os.path.isfile(self.__files['license'])):
+                web.log.Log.Log().Logger.debug(self.__files['license'])
+                account = self.__dbs['account']['Accounts'].find().next()
+                twofactor = self.__dbs['account']['TwoFactors'].find_one(AccountId=account['Id'])
+                authentications = []
+                if None is not twofactor:
+                    authentications.append(TwoFactorAuthentication(account['Username'], account['Password'], twofactor['Secret']))
+                else:
+                    authentications.append(BasicAuthentication(account['Username'], account['Password']))
+                client = web.service.github.api.v3.Client.Client(self, authentications)
+                l = database.license.Main.Main(self, client)
+                l.Create()
+                self.__dbs['license'] = dataset.connect('sqlite:///' + self.__files['license'])
+                l.Insert()
+            self.__dbs['license'] = dataset.connect('sqlite:///' + self.__files['license'])
+            """
+            # 自分アカウントのリポジトリDB生成（ファイル、テーブル作成。データ挿入）
+            for account in self.__dbs['account']['Accounts'].find():
+                self.__CreateRepositoryDb(account['Username'])
+            #for account in self.__account['Accounts'].find():
+                #self.__OpenRepo(account['Username'])
+            # 他者アカウントのリポジトリDB生成（ファイル、テーブル作成。データ挿入）
+
+
+    # DBファイル生成
+    def __CreateDb(self, dbname):
+        if not os.path.isfile(self.__files[dbname]):
+            # 空ファイル作成
+            with open(self.__dbs[dbname], 'w') as f: pass
+            # DB接続
+            self.__dbs[dbname] = dataset.connect('sqlite:///' + self.__files[dbname])
+            # テーブル作成（CreateTable文）
+            for path_sql in self.__GetCreateTableSqlFilePaths(dbname):
+                self.__ExecuteSqlFile(dbname, path_sql)
+            # 初期値の挿入（Insert文）
+            for path_tsv in self.__GetInsertTsvFilePaths(dbname):
+                table_name = os.path.splitext(table_name)[0]
+                loader = database.TsvLoader.TsvLoader()
+                loader.ToSqlite3(path_tsv, self.__files[dbname], table_name)
+        if not dbname in self.__dbs.keys():
+            self.__dbs[dbname] = dataset.connect('sqlite:///' + self.__files[dbname])
+
+    # パス取得（テーブル作成用SQLファイル）
+    def __GetCreateTableSqlFilePaths(self, dbname):
+        path = os.path.join(self.__path_dir_this, dbname, 'sql', 'create')
+        for path_sql in glob.glob(os.path.join(path + '*.sql')): yield path_sql
+
+    # パス取得（初期値挿入用TSVファイル）
+    def __GetInsertTsvFilePaths(self, dbname):
+        path = os.path.join(self.__path_dir_this, dbname, 'tsv')
+        for path_tsv in glob.glob(os.path.join(path + '*.tsv')): yield path_tsv
+        return self.__dbs[dbname]
+
+    # SQLファイル発行
+    def __ExecuteSqlFile(self, dbname, sql_path):
+        with open(sql_path, 'r') as f:
+            sql = f.read()
+            self.__dbs[dbname].query(sql)
+
+    # ライセンスDB作成（AccountDBに依存。WebAPIからデータ取得するため）
+    def __CreateLicenseDb(self):
+        dbname = 'license'
+        if not os.path.isfile(self.__files[dbname]):
+            # 空ファイル作成
+            with open(self.__dbs[dbname], 'w') as f: pass
+            # DB接続
+            self.__dbs[dbname] = dataset.connect('sqlite:///' + self.__files[dbname])
+            # テーブル作成（CreateTable文）
+            for path_sql in self.__GetCreateTableSqlFilePaths(dbname):
+                self.__ExecuteSqlFile(dbname, path_sql)
+            # 初期値の挿入（Insert文）
+            cilent = self.__GetClient() # AccessToken持ってる適当なアカウントを用いる
+            import database.license.insert.Main
+            inserter = database.license.insert.Main.Main(self.__dbs[dbname], client)
+            inserter.Initialize()
+            self.__dbs[dbname] = dataset.connect('sqlite:///' + self.__files[dbname])
+        if not dbname in self.__dbs.keys():
+            self.__dbs[dbname] = dataset.connect('sqlite:///' + self.__files[dbname])
+
+    def __GetClient(self, username=None):
+        if None is username: account = self.__dbs['account']['Accounts'].find().next()
+        else:                account = self.__dbs['account']['Accounts'].find_one(Username=username)
+        twofactor = self.__dbs['account']['TwoFactors'].find_one(AccountId=account['Id'])
+        authentications = []
+        if None is not twofactor:
+            authentications.append(TwoFactorAuthentication(account['Username'], account['Password'], twofactor['Secret']))
+        else:
+            authentications.append(BasicAuthentication(account['Username'], account['Password']))
+        return web.service.github.api.v3.Client.Client(self, authentications)
+        
+    # 各ユーザのリポジトリDB作成
+    def __CreateRepositoryDb(self, username):
+        if None is self.__dbs['repos']: self.__dbs['repos'] = {}
+        dbname = 'repo'
+        path_db = self.__files[dbname].replace('{user}', username)
+        if not os.path.isfile(path_db):
+            # 空ファイル作成
+            with open(path_db, 'w') as f: pass
+            # DB接続
+            self.__dbs['repos'][username] = dataset.connect('sqlite:///' + path_db)
+            # テーブル作成（CreateTable文）
+            for path_sql in self.__GetCreateTableSqlFilePaths(dbname):
+                self.__ExecuteSqlFile(dbname, path_sql)
+            # 初期値の挿入（Insert文）
+            cilent = self.__GetClient(username) # 指定アカウントを用いる
+            inserter = database.repo.insert.command.repositories.Inserter.Inserter(self, username, client)
+            inserter.Insert()
+        if not username in self.__dbs['repos'].keys():
+            self.__dbs['repos'][username] = dataset.connect('sqlite:///' + path_db)
+
+    """
     def __OpenDb(self):
         # マスターDB生成（ファイル、テーブル、データ挿入）
         if None is self.__lang:
@@ -151,4 +304,6 @@ class Database:
             inserter.Insert()
         if not(username in self.__repos.keys()):
             self.__repos[username] = dataset.connect('sqlite:///' + path)
+
+    """
 
