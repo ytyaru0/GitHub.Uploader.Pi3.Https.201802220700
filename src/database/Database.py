@@ -39,7 +39,7 @@ class Database:
             'repo': 'GitHub.Repositories.{user}.sqlite3',
         }
         self.__dbs = {
-            'language': None,
+            'lang': None,
             'api': None,
             'gnu_license': None,
             'account': None,
@@ -114,39 +114,118 @@ class Database:
         self.__OpenDb()
 
     def __OpenDb(self):
+        # マスターDB生成（ファイル、テーブル、データ挿入）
+        if None is self.__dbs['lang']:
+            if not os.path.isfile(self.__files['lang']):
+                m = database.language.Main.Main(self.__files['lang'])
+                m.Run()
+            self.__dbs['lang'] = dataset.connect('sqlite:///' + self.__files['lang'])
+        if None is self.__dbs['api']:
+            if not os.path.isfile(self.__files['api']):
+                m = database.api.Main.Main(self.__files['api'])
+                m.Run()
+            self.__dbs['api'] = dataset.connect('sqlite:///' + self.__files['api'])
+        if None is self.__dbs['gnu_license']:
+            if not os.path.isfile(self.__files['gnu_license']):
+                m = database.gnu_license.Main.Main(self.__files['gnu_license'])
+                m.Run()
+            self.__dbs['gnu_license'] = dataset.connect('sqlite:///' + self.__files['gnu_license'])
+
+        # アカウントDB生成（ファイル、テーブル作成。データ挿入はCUIにて行う）
+        if None is self.__dbs['account']:
+            if not os.path.isfile(self.__files['account']):
+                m = database.account.Main.Main(self.__files['account'])
+                m.Create()
+            self.__dbs['account'] = dataset.connect('sqlite:///' + self.__files['account'])
+
+        # DB作成にTokenが必要なもの
+        if 0 < self.__dbs['account']['Accounts'].count():
+            # ライセンスDB生成（ファイル、テーブル作成。データ挿入）
+            self.__CreateLicenseDb()
+
+            # 自分アカウントのリポジトリDB生成（ファイル、テーブル作成。データ挿入）
+            for account in self.__dbs['account']['Accounts'].find():
+                #self.__OpenRepo(account['Username'])
+                self.__CreateRepositoryDb(account['Username'])
+            # 他者アカウントのリポジトリDB生成（ファイル、テーブル作成。データ挿入）
+
+    # ライセンスDB作成
+    def __CreateLicenseDb(self):
+        if not(os.path.isfile(self.__files['license'])):
+            web.log.Log.Log().Logger.debug(self.__files['license'])
+            client = self.__GetClient()
+            l = database.license.Main.Main(self, client)
+            l.Create()
+            self.__dbs['license'] = dataset.connect('sqlite:///' + self.__files['license'])
+            l.Insert()
+        if not 'license' in self.__dbs.keys():
+            self.__dbs['license'] = dataset.connect('sqlite:///' + self.__files['license'])
+
+    # 各ユーザのリポジトリDB作成
+    def __CreateRepositoryDb(self, username):
+        if None is self.__dbs['repos']: self.__dbs['repos'] = {}
+        dbname = 'repo'
+        path_db = self.__files[dbname].replace('{user}', username)
+        if not os.path.isfile(path_db):
+            # 空ファイル作成
+            with open(path_db, 'w') as f: pass
+            # DB接続
+            self.__dbs['repos'][username] = dataset.connect('sqlite:///' + path_db)
+            self.__dbs['repos'][username].query('PRAGMA foreign_keys = false')
+            # テーブル作成（CreateTable文）
+            for path_sql in self.__GetCreateTableSqlFilePaths(dbname):
+                self.__ExecuteSqlFile(dbname, path_sql)
+            # 初期値の挿入（Insert文）
+            cilent = self.__GetClient(username) # 指定アカウントを用いる
+            inserter = database.repo.insert.command.repositories.Inserter.Inserter(self, username, client)
+            inserter.Insert()
+            self.__dbs['repos'][username].query('PRAGMA foreign_keys = true')
+        if not username in self.__dbs['repos'].keys():
+            self.__dbs['repos'][username] = dataset.connect('sqlite:///' + path_db)
+
+    def __GetClient(self, username=None):
+        if None is username: account = self.__dbs['account']['Accounts'].find().next()
+        else:                account = self.__dbs['account']['Accounts'].find_one(Username=username)
+        twofactor = self.__dbs['account']['TwoFactors'].find_one(AccountId=account['Id'])
+        authentications = []
+        if None is not twofactor:
+            authentications.append(TwoFactorAuthentication(account['Username'], account['Password'], twofactor['Secret']))
+        else:
+            authentications.append(BasicAuthentication(account['Username'], account['Password']))
+        return web.service.github.api.v3.Client.Client(self, authentications)
+        
+    # パス取得（テーブル作成用SQLファイル）
+    def __GetCreateTableSqlFilePaths(self, dbname):
+        path = os.path.join(self.__path_dir_this, dbname, 'sql', 'create')
+        for path_sql in glob.glob(os.path.join(path + '*.sql')): yield path_sql
+
+    # パス取得（初期値挿入用TSVファイル）
+    def __GetInsertTsvFilePaths(self, dbname):
+        path = os.path.join(self.__path_dir_this, dbname, 'tsv')
+        for path_tsv in glob.glob(os.path.join(path + '*.tsv')): yield path_tsv
+        return self.__dbs[dbname]
+
+    # SQLファイル発行
+    def __ExecuteSqlFile(self, dbname, sql_path):
+        with open(sql_path, 'r') as f:
+            sql = f.read()
+            self.__dbs[dbname].query(sql)
+
+    """
+    def __OpenDb(self):
         # 基本DB作成（順序あり）
         for name in ['language','api','gnu_license','account']:
             if None is self.__dbs[name]:
                 self.__CreateDb(name)
-
         # DB作成にTokenが必要なもの（他DB依存）
         if 0 < self.__dbs['account']['Accounts'].count():
             self.__CreateLicenseDb()
-            """
-            # ライセンスDB生成（ファイル、テーブル作成。データ挿入）
-            if not(os.path.isfile(self.__files['license'])):
-                web.log.Log.Log().Logger.debug(self.__files['license'])
-                account = self.__dbs['account']['Accounts'].find().next()
-                twofactor = self.__dbs['account']['TwoFactors'].find_one(AccountId=account['Id'])
-                authentications = []
-                if None is not twofactor:
-                    authentications.append(TwoFactorAuthentication(account['Username'], account['Password'], twofactor['Secret']))
-                else:
-                    authentications.append(BasicAuthentication(account['Username'], account['Password']))
-                client = web.service.github.api.v3.Client.Client(self, authentications)
-                l = database.license.Main.Main(self, client)
-                l.Create()
-                self.__dbs['license'] = dataset.connect('sqlite:///' + self.__files['license'])
-                l.Insert()
-            self.__dbs['license'] = dataset.connect('sqlite:///' + self.__files['license'])
-            """
             # 自分アカウントのリポジトリDB生成（ファイル、テーブル作成。データ挿入）
             for account in self.__dbs['account']['Accounts'].find():
                 self.__CreateRepositoryDb(account['Username'])
             #for account in self.__account['Accounts'].find():
                 #self.__OpenRepo(account['Username'])
             # 他者アカウントのリポジトリDB生成（ファイル、テーブル作成。データ挿入）
-
 
     # DBファイル生成
     def __CreateDb(self, dbname):
@@ -239,7 +318,7 @@ class Database:
             self.__dbs[dbname].query('PRAGMA foreign_keys = true')
         if not username in self.__dbs['repos'].keys():
             self.__dbs['repos'][username] = dataset.connect('sqlite:///' + path_db)
-
+    """
     """
     def __OpenDb(self):
         # マスターDB生成（ファイル、テーブル、データ挿入）

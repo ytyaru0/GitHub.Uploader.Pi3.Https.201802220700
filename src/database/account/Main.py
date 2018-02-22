@@ -12,11 +12,11 @@ class Main:
     def __init__(self, db_path):
         self.__db_path = db_path
         self.__path_this_dir = os.path.abspath(os.path.dirname(__file__))
-
+    
     def Run(self):
         self.__ConnectDb()
         # Create文
-        for filename in ['Apis']:
+        for filename in ['Accounts','TwoFactors','AccessTokens','SshKeys','SshConfigures']:
             path = os.path.join(self.__path_this_dir, 'sql/create/{0}.sh'.format(filename))
             self.__ExecuteSqlFile(path)
         # Insert文
@@ -37,7 +37,7 @@ class Main:
 
     # 初期値の挿入
     def __Insert(self):
-        tables = ['Apis']
+        tables = ['Accounts', 'TwoFactors', 'AccessTokens']
         for table in tables:
 #            path_tsv = os.path.join(self.__path_this_dir, "res/tsv/{0}.tsv".format(table))
             path_tsv = os.path.join(self.__path_this_dir, "tsv/meta_{0}.tsv".format(table))
@@ -50,31 +50,26 @@ class Main:
         self.__ExecuteSqlFile(path)
 
     """
-    def Run(self):
+    def Run____(self):
         self.__Create()
         self.__Insert()
 #        self.__Check() # Check.shで正常に文字列結合できずパスを作成できない。
 
-    def __Create(self):
+    def Create(self):
+        self.__Create()
+
+    def __CreateSh(self):
         subprocess.call(shlex.split("bash \"{0}\" \"{1}\"".format(os.path.join(self.__path_this_dir, "CreateTable.sh"), self.__db_path)))
 
-    def __Insert(self):
-        tables = ['Apis']
+    def __InsertSh(self):
+        tables = ['Accounts', 'TwoFactors', 'AccessTokens']
         for table in tables:
-            path_tsv = os.path.join(self.__path_this_dir, "res/tsv/{0}.tsv".format(table))
+#            path_tsv = os.path.join(self.__path_this_dir, "res/tsv/{0}.tsv".format(table))
+            path_tsv = os.path.join(self.__path_this_dir, "res/tsv/meta_{0}.tsv".format(table))
             loader = database.TsvLoader.TsvLoader()
             loader.ToSqlite3(path_tsv, self.__db_path, table)
 
-    def __Check(self):
-        # sqlite3: Error: too many options:
-#        subprocess.call(shlex.split("bash \"{0}\" \"{1}\"".format(os.path.join(self.__path_this_dir, "Check.sh"), self.__db_path)))
-#        cmd = "sqlite3 \"{0}\" < \"{1}\"".format(self.__db_path, os.path.join(self.__path_this_dir, "res/sql/check/check.sql"))
-#        cmd = "sqlite3 {0} < {1}".format(self.__db_path, os.path.join(self.__path_this_dir, "res/sql/check/check.sql"))
-#        cmd = 'sqlite3 "{0}" "{1}"'.format(self.__db_path, os.path.join(self.__path_this_dir, "res/sql/check/check.sql"))
-#        cmd = 'sqlite3 {0} < {1}'.format(self.__db_path, os.path.join(self.__path_this_dir, "res/sql/check/check.sql"))
-#        cmd = 'sqlite3 {0} < \"{1}\"'.format(self.__db_path, os.path.join(self.__path_this_dir, "res/sql/check/check.sql"))
-#        print(cmd)
-#        subprocess.call(shlex.split(cmd))
-        pass
+    def __CheckSh(self):
+        subprocess.call(shlex.split("bash \"{0}\" \"{1}\"".format(os.path.join(self.__path_this_dir, "Check.sh"), self.__db_path)))
     """
 
