@@ -155,6 +155,7 @@ class Database:
             with open(self.__dbs[dbname], 'w') as f: pass
             # DB接続
             self.__dbs[dbname] = dataset.connect('sqlite:///' + self.__files[dbname])
+            self.__dbs[dbname].query('PRAGMA foreign_keys = false')
             # テーブル作成（CreateTable文）
             for path_sql in self.__GetCreateTableSqlFilePaths(dbname):
                 self.__ExecuteSqlFile(dbname, path_sql)
@@ -163,6 +164,7 @@ class Database:
                 table_name = os.path.splitext(table_name)[0]
                 loader = database.TsvLoader.TsvLoader()
                 loader.ToSqlite3(path_tsv, self.__files[dbname], table_name)
+            self.__dbs[dbname].query('PRAGMA foreign_keys = true')
         if not dbname in self.__dbs.keys():
             self.__dbs[dbname] = dataset.connect('sqlite:///' + self.__files[dbname])
 
@@ -191,6 +193,7 @@ class Database:
             with open(self.__dbs[dbname], 'w') as f: pass
             # DB接続
             self.__dbs[dbname] = dataset.connect('sqlite:///' + self.__files[dbname])
+            self.__dbs[dbname].query('PRAGMA foreign_keys = false')
             # テーブル作成（CreateTable文）
             for path_sql in self.__GetCreateTableSqlFilePaths(dbname):
                 self.__ExecuteSqlFile(dbname, path_sql)
@@ -200,6 +203,7 @@ class Database:
             inserter = database.license.insert.Main.Main(self.__dbs[dbname], client)
             inserter.Initialize()
             self.__dbs[dbname] = dataset.connect('sqlite:///' + self.__files[dbname])
+            self.__dbs[dbname].query('PRAGMA foreign_keys = true')
         if not dbname in self.__dbs.keys():
             self.__dbs[dbname] = dataset.connect('sqlite:///' + self.__files[dbname])
 
@@ -224,6 +228,7 @@ class Database:
             with open(path_db, 'w') as f: pass
             # DB接続
             self.__dbs['repos'][username] = dataset.connect('sqlite:///' + path_db)
+            self.__dbs[dbname].query('PRAGMA foreign_keys = false')
             # テーブル作成（CreateTable文）
             for path_sql in self.__GetCreateTableSqlFilePaths(dbname):
                 self.__ExecuteSqlFile(dbname, path_sql)
@@ -231,6 +236,7 @@ class Database:
             cilent = self.__GetClient(username) # 指定アカウントを用いる
             inserter = database.repo.insert.command.repositories.Inserter.Inserter(self, username, client)
             inserter.Insert()
+            self.__dbs[dbname].query('PRAGMA foreign_keys = true')
         if not username in self.__dbs['repos'].keys():
             self.__dbs['repos'][username] = dataset.connect('sqlite:///' + path_db)
 
